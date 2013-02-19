@@ -261,6 +261,7 @@ LIBS-y += drivers/usb/gadget/
 LIBS-y += drivers/usb/host/
 LIBS-y += drivers/usb/musb/
 LIBS-y += drivers/usb/musb-new/
+LIBS-y += drivers/usb/dwc3/
 LIBS-y += drivers/usb/phy/
 LIBS-y += drivers/usb/ulpi/
 LIBS-y += common/
