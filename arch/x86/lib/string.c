@@ -14,7 +14,7 @@
 
 typedef uint32_t op_t;
 
-void *memset(void *dstpp, int c, size_t len)
+void *memset(void *dstpp, int c, __kernel_size_t len)
 {
 	int d0;
 	unsigned long int dstp = (unsigned long int) dstpp;
@@ -102,7 +102,7 @@ do {									  \
 	(nbytes_left) = (nbytes) % 4;					  \
 } while (0)
 
-void *memcpy(void *dstpp, const void *srcpp, size_t len)
+void *memcpy(void *dstpp, const void *srcpp, __kernel_size_t len)
 {
 	unsigned long int dstp = (long int)dstpp;
 	unsigned long int srcp = (long int)srcpp;
