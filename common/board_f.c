@@ -1063,11 +1063,7 @@ void board_init_f_r(void)
 	 * Transfer execution from Flash to RAM by calculating the address
 	 * of the in-RAM copy of board_init_r() and calling it
 	 */
-	printf("VTI_DEBUG %s %d\n", __func__, __LINE__);
-	printf("VTI_DEBUG %lx %lx\n", gd->reloc_off, gd->relocaddr);
-	printf("VTI_DEBUG %p %p\n", &board_init_r, &board_init_r + gd->reloc_off);
-	main_loop();
-	printf("VTI_DEBUG %s %d\n", __func__, __LINE__);
+	(board_init_r + gd->reloc_off)(gd, gd->relocaddr);
 
 	/* NOTREACHED - board_init_r() does not return */
 	hang();
