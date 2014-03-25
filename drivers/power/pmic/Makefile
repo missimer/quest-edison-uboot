@@ -11,3 +11,4 @@ obj-$(CONFIG_POWER_MUIC_MAX8997) += muic_max8997.o
 obj-$(CONFIG_POWER_MAX77686) += pmic_max77686.o
 obj-$(CONFIG_POWER_TPS65217) += pmic_tps65217.o
 obj-$(CONFIG_POWER_TPS65910) += pmic_tps65910.o
+obj-$(CONFIG_INTEL_SCU) += intel_scu_pmic.o
