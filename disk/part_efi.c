@@ -213,14 +213,15 @@ int test_part_efi(block_dev_desc_t * dev_desc)
  */
 static int set_protective_mbr(block_dev_desc_t *dev_desc)
 {
-	legacy_mbr *p_mbr;
+	ALLOC_CACHE_ALIGN_BUFFER_PAD(legacy_mbr, p_mbr, 1, dev_desc->blksz);
 
-	/* Setup the Protective MBR */
-	p_mbr = calloc(1, sizeof(p_mbr));
-	if (p_mbr == NULL) {
-		printf("%s: calloc failed!\n", __func__);
+	/* Read MBR to backup boot_code if it exists */
+	if (dev_desc->block_read(dev_desc->dev, 0, 1, p_mbr) != 1) {
+		printf("** Can't read from device %d **\n", dev_desc->dev);
+		free(p_mbr);
 		return -1;
 	}
+
 	/* Append signature */
 	p_mbr->signature = MSDOS_MBR_SIGNATURE;
 	p_mbr->partition_record[0].sys_ind = EFI_PMBR_OSTYPE_EFI_GPT;
@@ -231,11 +232,9 @@ static int set_protective_mbr(block_dev_desc_t *dev_desc)
 	if (dev_desc->block_write(dev_desc->dev, 0, 1, p_mbr) != 1) {
 		printf("** Can't write to device %d **\n",
 			dev_desc->dev);
-		free(p_mbr);
 		return -1;
 	}
 
-	free(p_mbr);
 	return 0;
 }
 
