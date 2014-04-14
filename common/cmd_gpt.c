@@ -12,6 +12,7 @@
 #include <malloc.h>
 #include <command.h>
 #include <part_efi.h>
+#include <part.h>
 #include <exports.h>
 #include <linux/ctype.h>
 #include <div64.h>
@@ -282,25 +283,28 @@ static int do_gpt(cmd_tbl_t *cmdtp, int flag, int argc, char * const argv[])
 	char *ep;
 	block_dev_desc_t *blk_dev_desc;
 
-	if (argc < 5)
+	if (argc < 4)
 		return CMD_RET_USAGE;
+
+	dev = (int)simple_strtoul(argv[3], &ep, 10);
+	if (!ep || ep[0] != '\0') {
+		printf("'%s' is not a number\n", argv[3]);
+		return CMD_RET_USAGE;
+	}
+	blk_dev_desc = get_dev(argv[2], dev);
+	if (!blk_dev_desc) {
+		printf("%s: %s dev %d NOT available\n",
+			   __func__, argv[2], dev);
+		return CMD_RET_FAILURE;
+	}
 
 	/* command: 'write' */
 	if ((strcmp(argv[1], "write") == 0) && (argc == 5)) {
-		dev = (int)simple_strtoul(argv[3], &ep, 10);
-		if (!ep || ep[0] != '\0') {
-			printf("'%s' is not a number\n", argv[3]);
-			return CMD_RET_USAGE;
-		}
-		blk_dev_desc = get_dev(argv[2], dev);
-		if (!blk_dev_desc) {
-			printf("%s: %s dev %d NOT available\n",
-			       __func__, argv[2], dev);
-			return CMD_RET_FAILURE;
-		}
-
 		if (gpt_default(blk_dev_desc, argv[4]))
 			return CMD_RET_FAILURE;
+	} else if ((strcmp(argv[1], "test") == 0) && (argc == 4)) {
+			if (test_part_efi(blk_dev_desc) != 0)
+				ret = CMD_RET_FAILURE;
 	} else {
 		return CMD_RET_USAGE;
 	}
