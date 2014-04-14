@@ -15,15 +15,15 @@ NO_OSIP_IMAGE="${BASE_IMAGE}.no-osip"
 NO_OSIP_IMAGE_TMP="${BASE_IMAGE}.no-osip-tmp"
 FINAL_IMAGE="${BASE_IMAGE}.osip"
 
-${TOOLS_DIR}/mkenvimage -s 0x10000 ${ENV_FILE} -o ${ENV0_IMAGE}
-${TOOLS_DIR}/mkenvimage -s 0x10000 ${ENV_FILE} -r -o ${ENV1_IMAGE}
+#env size is the one defined in edison.h
+ENV_SIZE=0x10000
+${TOOLS_DIR}/mkenvimage -s ${ENV_SIZE} ${ENV_FILE} -o ${ENV0_IMAGE}
+${TOOLS_DIR}/mkenvimage -s ${ENV_SIZE} ${ENV_FILE} -r -o ${ENV1_IMAGE}
 
 # FIXME: u-boot backup needs to have its own OSIP header
 cat u-boot.bin | dd of=${NO_OSIP_IMAGE_TMP} bs=4096 seek=1
 dd if=/dev/zero of=${NO_OSIP_IMAGE} bs=8M count=1
 dd if=${NO_OSIP_IMAGE_TMP} of=${NO_OSIP_IMAGE} bs=1M conv=notrunc seek=0
 dd if=${ENV0_IMAGE} of=${NO_OSIP_IMAGE} bs=1M conv=notrunc seek=2
-dd if=${NO_OSIP_IMAGE_TMP} of=${NO_OSIP_IMAGE} bs=1M conv=notrunc seek=2
-dd if=${ENV1_IMAGE} of=${NO_OSIP_IMAGE} bs=1M conv=notrunc seek=6
-
+dd if=${ENV1_IMAGE} of=${NO_OSIP_IMAGE} bs=1M conv=notrunc seek=5
 ${XFSTK_DIR}/gen_os --input ${NO_OSIP_IMAGE} --output ${FINAL_IMAGE} --xml ${TOOLS_DIR}/saltbay.XML
