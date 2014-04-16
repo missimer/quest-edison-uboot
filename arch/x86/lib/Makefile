@@ -24,5 +24,6 @@ obj-$(CONFIG_SFI) += sfi.o
 LIBGCC := $(notdir $(NORMAL_LIBGCC))
 extra-y := $(LIBGCC)
 
-$(obj)$(LIBGCC): $(NORMAL_LIBGCC)
-	$(OBJCOPY) $< $@ --prefix-symbols=__normal_
+OBJCOPYFLAGS := --prefix-symbols=__normal_
+$(obj)/$(LIBGCC): $(NORMAL_LIBGCC) FORCE
+	$(call if_changed,objcopy)
