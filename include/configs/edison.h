@@ -347,7 +347,7 @@
  */
 
 #define CONFIG_INTEL_SCU
-#define CONFIG_INTEL_SCU_WATCHDOG
+#define CONFIG_HW_WATCHDOG
 #define CONFIG_SCU_BASE_ADDR                0xff000000
 #define CONFIG_SCU_IPC_BASE         0xff009000
 #define CONFIG_SCU_I2C_BASE         0xff00d000
