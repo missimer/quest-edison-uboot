@@ -24,6 +24,7 @@ static int do_dfu(cmd_tbl_t *cmdtp, int flag, int argc, char * const argv[])
 
 	char *s = "dfu";
 	int ret, i = 0;
+	static int workaround = 0;
 
 	ret = dfu_init_env_entities(interface, simple_strtoul(devstring,
 							      NULL, 10));
@@ -53,6 +54,17 @@ static int do_dfu(cmd_tbl_t *cmdtp, int flag, int argc, char * const argv[])
 			goto exit;
 
 		usb_gadget_handle_interrupts();
+		workaround++;
+
+		 if (workaround < 3)
+		 {
+		     mdelay(2000);
+		     g_dnl_unregister();
+		     dfu_free_entities();
+		     do_dfu(cmdtp, flag, argc, argv);
+			 return CMD_RET_SUCCESS;
+		 }
+
 	}
 exit:
 	g_dnl_unregister();
