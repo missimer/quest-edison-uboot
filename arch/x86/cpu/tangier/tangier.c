@@ -34,9 +34,19 @@ int board_early_init_f(void)
 	return 0;
 }
 
+#define IPC_WATCHDOG 0xF8
+
+enum {
+    SCU_WATCHDOG_START = 0,
+    SCU_WATCHDOG_STOP,
+    SCU_WATCHDOG_KEEPALIVE,
+    SCU_WATCHDOG_SET_ACTION_ON_TIMEOUT
+};
+
 int board_early_init_r(void)
 {
 	init_scu_ipc();
+	intel_scu_ipc_simple_command(IPC_WATCHDOG, SCU_WATCHDOG_STOP);
 	return 0;
 }
 
