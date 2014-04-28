@@ -1,6 +1,9 @@
 #ifndef _EDISON_H
 #define _EDISON_H
 
+#define CONFIG_WATCHDOG
+#define CONFIG_WATCHDOG_HEARTBEAT 30
+
 #define CONFIG_SFI
 
 /*-----------------------------------------------------------------------
