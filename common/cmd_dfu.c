@@ -56,9 +56,9 @@ static int do_dfu(cmd_tbl_t *cmdtp, int flag, int argc, char * const argv[])
 		usb_gadget_handle_interrupts();
 		workaround++;
 
-		 if (workaround < 3)
+		 if (workaround < 4)
 		 {
-		     mdelay(2000);
+		     mdelay(500);
 		     g_dnl_unregister();
 		     dfu_free_entities();
 		     do_dfu(cmdtp, flag, argc, argv);
