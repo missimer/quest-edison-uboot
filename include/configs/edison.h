@@ -320,6 +320,7 @@
 #define CONFIG_CMD_SAVEENV
 #define CONFIG_CMD_RUN
 #define CONFIG_SUPPORT_EMMC_BOOT
+#define CONFIG_CMD_SETEXPR
 
 /*-----------------------------------------------------------------------
  * USB
