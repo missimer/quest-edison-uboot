@@ -3,8 +3,8 @@
 
 #define CONFIG_WATCHDOG
 #define CONFIG_WATCHDOG_HEARTBEAT 30
-
 #define CONFIG_SFI
+#define CONFIG_BOARD_LATE_INIT
 
 /*-----------------------------------------------------------------------
  * Misc
@@ -220,6 +220,7 @@
 /*
 * MMC
  */
+#define CONFIG_MD5
 #define CONFIG_GENERIC_MMC
 #define CONFIG_MMC
 #define CONFIG_SDHCI
