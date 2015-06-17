@@ -19,12 +19,14 @@
 #include <net.h>
 #include <elf.h>
 #include <vxworks.h>
+#include <multiboot.h>
 
 #if defined(CONFIG_WALNUT) || defined(CONFIG_SYS_VXWORKS_MAC_PTR)
 DECLARE_GLOBAL_DATA_PTR;
 #endif
 
-static unsigned long load_elf_image_phdr(unsigned long addr);
+static unsigned long load_elf_image_phdr(unsigned long addr,
+                                         unsigned long *top_addr);
 static unsigned long load_elf_image_shdr(unsigned long addr);
 
 /* Allow ports to override the default behavior */
@@ -119,7 +121,7 @@ int do_bootelf(cmd_tbl_t *cmdtp, int flag, int argc, char * const argv[])
 		return 1;
 
 	if (sload && sload[1] == 'p')
-		addr = load_elf_image_phdr(addr);
+		addr = load_elf_image_phdr(addr, NULL);
 	else
 		addr = load_elf_image_shdr(addr);
 
@@ -136,6 +138,248 @@ int do_bootelf(cmd_tbl_t *cmdtp, int flag, int argc, char * const argv[])
 	printf("## Application terminated, rc = 0x%lx\n", rc);
 	return rcode;
 }
+
+
+void do_multiboot_exec(ulong (*entry)(void), multiboot_info_t *mb_info) __attribute__ ((noreturn));
+void do_multiboot_exec(ulong (*entry)(void), multiboot_info_t *mb_info)
+{
+	/*
+	 * QNX images require the data cache is disabled.
+	 * Data cache is already flushed, so just turn it off.
+	 */
+	int dcache = dcache_status();
+	if (dcache)
+		dcache_disable();
+
+	/*
+	 * pass address parameter as argv[0] (aka command name),
+	 * and all remaining args
+	 */
+	asm volatile("call *%0": : "m" (entry), "b"(mb_info));
+	while(1);
+}
+
+static char*
+populate_multiboot_mmap(char *arg, multiboot_memory_map_t *mmap)
+{
+	char values[3][20];
+	int current_val = 0;
+	int current_pos = 0;
+
+	while(*arg && *arg != ':') {
+		if(*arg == ',') {
+			current_val++;
+			if(current_val == 3) {
+				return NULL;
+			}
+			current_pos = 0;
+		}
+		else {
+			values[current_val][current_pos++] = *arg;
+			if(current_pos == 20) {
+				return NULL;
+			}
+		}
+		arg++;
+	}
+
+	if(*arg == ':') {
+		arg++;
+	}
+
+	if(current_val != 2) {
+		printf("LINE = %d", __LINE__);
+		return NULL;
+	}
+
+	mmap->type = simple_strtoul(values[0], NULL, 10);
+	mmap->addr = simple_strtoul(values[1], NULL, 16);
+	mmap->len  = simple_strtoul(values[2], NULL, 16);
+	mmap->size = sizeof(*mmap) - sizeof(mmap->size);
+
+	return arg;
+}
+
+static int
+parse_number_modules(char* arg)
+{
+	int num_modules = 0;
+	while(*arg) {
+		if(*arg == ',') {
+			num_modules++;
+		}
+		arg++;
+	}
+	return num_modules;
+}
+
+static char*
+parse_module_load_cmd(char *arg, char *cmd, size_t cmd_len)
+{
+	int i;
+	for(i = 0; i < cmd_len && *arg != ','; i++) {
+		cmd[i] = *arg++;
+	}
+	if(i == cmd_len) {
+		printf("Failed to determine multiboot module load command");
+	}
+	cmd[i] = '\0';
+	arg++; /* skip the , */
+	return arg;
+}
+
+static char*
+load_multiboot_module(char *load_cmd,
+                      char *arg,
+                      unsigned long *top_addr,
+                      multiboot_module_t *module)
+{
+	int i;
+	char module_line[64];
+	char *argv[CONFIG_SYS_MAXARGS + 1]; /* NULL terminated */
+	char load_addr[16];
+	int argc;
+	int repeatable = 1;
+	ulong filesize;
+
+	snprintf(load_addr, sizeof(load_addr), "0x%lX", *top_addr);
+	for(i = 0; i < sizeof(module_line) && *arg && *arg != ','; ++i, ++arg) {
+		module_line[i] = *arg;
+	}
+	if(i == sizeof(module_line)) {
+		return NULL;
+	}
+
+	argv[0] = load_cmd;
+
+	argc = parse_line(module_line, argv+1);
+	argc++;
+	for(i = 1; i < argc; i++) {
+		if(strcmp(argv[i], "@") == 0) {
+			argv[i] = load_addr;
+		}
+	}
+
+	if(cmd_process(0, argc, argv, &repeatable, NULL)) {
+		return NULL;
+	}
+
+	filesize = getenv_hex("filesize", 0);
+
+	if(filesize == 0) {
+		printf("Failed to get multiboot module filesize\n");
+		return NULL;
+	}
+
+	module->mod_start = *top_addr;
+
+	*top_addr += filesize;
+
+	module->mod_end = *top_addr;
+	module->cmdline = 0;
+	module->pad = 0;
+
+	printf("filesize = %lX\n", filesize);
+
+	if(*arg == ',') {
+		arg++;
+	}
+	return arg;
+}
+
+#define PAGE_ALIGN(val)                                                       \
+	(val & 0xFFF ? ((val + 0x1000) & ~((unsigned long)0x1000 - 1)) : val)
+
+int do_multiboot(cmd_tbl_t *cmdtp, int flag, int argc, char * const argv[])
+{
+	unsigned long addr;		/* Address of the ELF image     */
+	unsigned long top_addr;
+	char *saddr;
+	multiboot_info_t *mb_info;
+	char* arg;
+
+	/* -------------------------------------------------- */
+
+	saddr = argv[1];
+
+	if (saddr)
+		addr = simple_strtoul(saddr, NULL, 16);
+	else
+		addr = load_addr;
+
+	if (!valid_elf_image(addr))
+		return 1;
+
+	addr = load_elf_image_phdr(addr, &top_addr);
+
+	top_addr = PAGE_ALIGN(top_addr);
+
+	printf("## Starting application at 0x%08lx ...\n", addr);
+	printf("## Loading multiboot info struct at 0x%08lx ...\n", top_addr);
+	mb_info = (multiboot_info_t *)top_addr;
+	top_addr += sizeof(*mb_info);
+	memset(mb_info, 0, sizeof(*mb_info));
+
+	/*
+	 * First set up the command line (cmdline in multiboot speak bootargs in uboot
+	 * speak)
+	 */
+
+	arg = getenv("bootargs");
+	if(arg) {
+		size_t length = strlen(arg) + 1;
+		mb_info->flags |= MULTIBOOT_INFO_CMDLINE;
+		memcpy((void*)top_addr, arg, length);
+		mb_info->cmdline = top_addr;
+		top_addr += length;
+	}
+
+	/*
+	 * Set up the multiboot memory map
+	 */
+	arg = getenv("mb_mmap");
+	if(arg) {
+		multiboot_memory_map_t *mmap;
+		mb_info->flags |= MULTIBOOT_INFO_MEM_MAP;
+		mb_info->mmap_addr = top_addr;
+		mmap = (multiboot_memory_map_t*)mb_info->mmap_addr;
+		while(*arg) {
+			arg = populate_multiboot_mmap(arg, mmap);
+			if(arg == NULL) {
+				printf("Failed to read env variable mb_mmap\n");
+				return 1;
+			}
+			mmap = (multiboot_memory_map_t*)((unsigned int)mmap + sizeof(*mmap));
+			top_addr = (unsigned long)mmap;
+		}
+		mb_info->mmap_length = top_addr - mb_info->mmap_addr;
+	}
+
+	arg = getenv("mb_modules");
+	if(arg) {
+		char load_cmd[20];
+		multiboot_module_t *modules;
+		int i;
+		mb_info->mods_count = parse_number_modules(arg);
+		arg = parse_module_load_cmd(arg, load_cmd, sizeof(load_cmd));
+		mb_info->flags |= MULTIBOOT_INFO_MODS;
+		mb_info->mods_addr = top_addr;
+		modules = (multiboot_module_t *)mb_info->mods_addr;
+		top_addr += sizeof(multiboot_module_t) * mb_info->mods_count;
+		for(i = 0; i < mb_info->mods_count; i++) {
+			top_addr = PAGE_ALIGN(top_addr);
+			arg = load_multiboot_module(load_cmd, arg, &top_addr, &modules[i]);
+			if(arg == NULL) {
+				printf("Failed to read env variables mb_modules");
+				return 1;
+			}
+		}
+	}
+
+	do_multiboot_exec((void *)addr, mb_info);
+}
+
+
 
 /* ======================================================================
  * Interpreter command to boot VxWorks from a memory image.  The image can
@@ -273,7 +517,8 @@ int do_bootvx(cmd_tbl_t *cmdtp, int flag, int argc, char * const argv[])
  * A very simple elf loader, assumes the image is valid, returns the
  * entry point address.
  * ====================================================================== */
-static unsigned long load_elf_image_phdr(unsigned long addr)
+static unsigned long load_elf_image_phdr(unsigned long addr,
+                                         unsigned long *top_addr)
 {
 	Elf32_Ehdr *ehdr;		/* Elf header structure pointer     */
 	Elf32_Phdr *phdr;		/* Program header structure pointer */
@@ -281,6 +526,10 @@ static unsigned long load_elf_image_phdr(unsigned long addr)
 
 	ehdr = (Elf32_Ehdr *) addr;
 	phdr = (Elf32_Phdr *) (addr + ehdr->e_phoff);
+
+	if(top_addr) {
+		*top_addr = 0;
+	}
 
 	/* Load each program header */
 	for (i = 0; i < ehdr->e_phnum; ++i) {
@@ -293,6 +542,12 @@ static unsigned long load_elf_image_phdr(unsigned long addr)
 		if (phdr->p_filesz != phdr->p_memsz)
 			memset(dst + phdr->p_filesz, 0x00,
 				phdr->p_memsz - phdr->p_filesz);
+		if(top_addr) {
+			unsigned long tmp = phdr->p_paddr + phdr->p_filesz;
+			if(tmp > *top_addr) {
+				*top_addr = tmp;
+			}
+		}
 		flush_cache((unsigned long)dst, phdr->p_filesz);
 		++phdr;
 	}
@@ -366,4 +621,10 @@ U_BOOT_CMD(
 	bootvx,      2,      0,      do_bootvx,
 	"Boot vxWorks from an ELF image",
 	" [address] - load address of vxWorks ELF image."
+);
+
+U_BOOT_CMD(
+	multiboot,      2,      0,      do_multiboot,
+	"Boot a multibook kernel from an ELF image",
+	" [address] - load address of kernel ELF image."
 );
